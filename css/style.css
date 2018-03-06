@@ -1,0 +1,80 @@
+#configuration_form.disable {
+    position: relative;
+}
+
+#configuration_form.disable:before {
+    content: '';
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #fff;
+    opacity: 0.5;
+    z-index: 100;
+}
+
+.import-report {
+    overflow: hidden;
+}
+
+.import-report__content {
+    height: 60px;
+    position: relative;
+}
+
+.import-report__content i
+{
+    position: absolute;
+    top: 0;
+    text-align: center;
+    color: #fff;
+    line-height: 26px;
+    left: 0;
+    -webkit-border-radius: 3px;
+    border-radius: 3px;
+    font-size: 28px;
+}
+
+.import-report__content .icon-flag {
+    color: #1a90a8;
+}
+.import-report__content .icon-chain-broken {
+    color: #a81a1a;
+}
+.import-report__content .icon-check {
+    color: #1aa018;
+}
+
+.import-report__content .title {
+    display: block;
+    margin-left: 40px;
+}
+
+.import-report__content .value {
+    display: block;
+    margin-left: 40px;
+    font-size: 24px;
+    line-height: 22px;
+}
+
+.panel[data-report] {
+    display: none;
+}
+
+#b-export.loading {
+    position: relative;
+}
+#b-export.loading:before {
+    content: '';
+    display: block;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: rgba(255, 255, 255, 0.8) url('../images/spinner.gif') center no-repeat;
+    z-index: 100;
+    border-radius: 5px;
+}
