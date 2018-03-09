@@ -1,19 +1,37 @@
 <?php
 
-require_once (_PS_MODULE_DIR_ . 'tvmatras/classes/Exporter.php');
+require_once (_PS_MODULE_DIR_ . 'tvmatras/classes/TvMatrasExporter.class.php');
+require_once (_PS_MODULE_DIR_ . 'tvmatras/classes/TvMatrasResponse.class.php');
+require_once (_PS_MODULE_DIR_ . 'tvmatras/classes/TvMatrasUtility.class.php');
 
 class AdminTvMatrasIndexController extends ModuleAdminController
 {
+    /** @var TvMatrasResponse response */
+    private $response;
+
+    public $context;
+
+    /** @var TvMatrasUtility response */
+    private $utility;
+
+    private $timeout = 100000;
     private $submitValue = 'submitImportPrice';
+
     private $basePath = _PS_MODULE_DIR_ . 'tvmatras/';
+    private $logPath = _PS_MODULE_DIR_ . 'tvmatras/log/';
+    private $exportPath = _PS_MODULE_DIR_ . 'tvmatras/export/';
 
     private $step_limit = 10;
 
     public function init()
     {
         parent::init();
+
+        $this->response = new TvMatrasResponse();
+        $this->utility = new TvMatrasUtility($this);
+
         if($hash = Tools::getValue('download')) {
-            $this->outputFile($hash);
+            $this->utility->outputFile($hash);
             exit();
         }
 
@@ -34,8 +52,6 @@ class AdminTvMatrasIndexController extends ModuleAdminController
 
         $content = $smarty->fetch($this->basePath . 'views/templates/admin/index.tpl');
         $this->context->smarty->assign(array('content' => $content));
-
-
     }
 
     public function renderForm()
@@ -71,128 +87,101 @@ class AdminTvMatrasIndexController extends ModuleAdminController
         return $helper->generateForm(array($fields_form));
     }
 
-    public function outputFile($hash)
-    {
-        $file = base64_decode($hash);
-        $filename = date('Ymd', time());
-
-        header("Content-type: text/csv");
-        header("Content-Disposition: attachment; filename={$filename}.csv");
-        header("Pragma: no-cache");
-        header("Expires: 0");
-
-        readfile($file);
-    }
-
     public function ajaxProcessExportPrice()
     {
-        $path = _PS_MODULE_DIR_ . 'tvmatras/export/' . md5(time()) . '.csv';
-        Exporter::Export();
+        TvMatrasExporter::Export();
+        $products = TvMatrasExporter::$products;
 
+        $path = $this->exportPath . md5(time()) . '.csv';
         $file = fopen($path, 'w');
 
-        fputcsv($file, array(
-            'Код товара',
-            'Название',
-            'Цена',
-            'Производитель',
-            'Ссылка на товар',
-        ), ';');
+        $title = $this->utility->convertToWin('Код товара;Название;Цена;Производитель;Ссылка на товар' . "\n\r");
+        fwrite($file, $title);
 
-        foreach (Exporter::$products as $product) {
+        foreach ($products as $product) {
+            $name = $product['name'] . ((!empty($product['attr_name'])) ? ' ' . $product['attr_name'] : '');
+
             fputcsv($file, array(
                 (string)$product['sku'],
-                $product['name'] . ((!empty($product['attr_name'])) ? ' ' . $product['attr_name'] : ''),
+                $this->utility->convertToWin($name),
                 (int)$product['price'],
-                $product['manufacturer'],
+                $this->utility->convertToWin($product['manufacturer']),
                 $product['link'],
             ), ';');
         }
 
         fclose($file);
 
-        $response['success'] = true;
-        $response['url'] = $this->makeDownloadFileUrl($path);
-
-        $this->sendResponse($response);
+        $this->response->setSuccess(true);
+        $this->response->setUrl($this->utility->makeDownloadFileUrl($path));
+        $this->sendResponse();
     }
 
     public function ajaxProcessUploadFilePrice()
     {
-        $response = array(
-            'success' => false,
-            'error' => '',
-            'data' => array()
-        );
-
         if(!isset($_FILES) || !isset($_FILES['price'])) {
-            $response['error'] = 'Error on file upload: Import file not found.';
-            $this->sendResponse($response);
+            $this->response->setMsg('Error on file upload: Import file not found.');
+            $this->sendResponse();
         }
         else if($_FILES['price']['type'] != 'text/csv') {
-            $response['error'] = 'Error on file upload: File must be a CSV.';
-            $this->sendResponse($response);
+            $this->response->setMsg('Error on file upload: File must be a CSV.');
+            $this->sendResponse();
         }
 
-        $file = $this->basePath . 'tmp/' . md5(time()) . '.csv';
-        if(!move_uploaded_file($_FILES['price']['tmp_name'], $file)) {
-            $response['error'] = 'Error on file upload: Possible file upload attack.';
-            $this->sendResponse($response);
+        $path = $this->basePath . 'tmp/' . md5(time()) . '.csv';
+        if(!move_uploaded_file($_FILES['price']['tmp_name'], $path)) {
+            $this->response->setMsg('Error on file upload: Possible file upload attack.');
+            $this->sendResponse();
         }
 
-        $total = $this->getRecordsCount($file);
+        $total = $this->utility->getLinesCount($path) - 1; // remover title line from count
 
-        $response['data'] = array(
+        $this->response->setSuccess(true);
+        $this->response->setData(array(
             'total' => $total,
-            'file' => $file,
+            'file' => $path,
             'stepLimit' => $this->step_limit,
             'steps' => ceil($total/$this->step_limit),
             'step' => 0
-        );
-        $response['success'] = true;
-        $this->sendResponse($response);
+        ));
+        $this->sendResponse();
     }
 
     public function ajaxProcessImportPrice()
     {
-        $response = array(
-            'success' => true,
-            'error' => '',
-            'data' => array(),
-            'log' => array()
-        );
-
         $total = (int) $_POST['total'];
-        $step = (int)$_POST['step'];
+        $step = (int) $_POST['step'];
         $file = $_POST['file'];
 
-        $response['log'] = $this->readFile($file, $step);
-
-        $response['data'] = array(
+        $this->response->setSuccess(true);
+        $this->response->setLog($this->readFile($file, $step));
+        $this->response->setData(array(
             'total' => $total,
             'file' => $file,
             'stepLimit' => $this->step_limit,
             'steps' => ceil($total/$this->step_limit),
             'step' => $step
-        );
+        ));
 
-        $this->sendResponse($response);
+        $this->sendResponse();
     }
 
     public function ajaxProcessClean()
     {
-        $this->clearDir($dir = $this->basePath . 'tmp/');
+        $this->utility->cleanDir($dir = $this->basePath . 'tmp/');
 
-        $response['success'] = true;
-        $path = $this->basePath . 'log/' . basename($_POST['file']);
-        $response['url'] = $this->context->link->getAdminLink('AdminTvMatrasIndex', true);
-        $response['url'].= '&download='.base64_encode($path);
-        $this->sendResponse($response);
+        $path = $this->logPath . basename($_POST['file']);
+        $url = $this->utility->makeDownloadFileUrl($path);
+        
+        $this->response->setSuccess(true);
+        $this->response->setUrl($url);
+
+        $this->sendResponse();
     }
 
     private function readFile($path, $step)
     {
-        $result = array(
+        $log = array(
             'total' => 0,
             'fail' => 0,
             'pass' => 0,
@@ -216,28 +205,29 @@ class AdminTvMatrasIndexController extends ModuleAdminController
 
             if(!empty($data[0])) {
                 if($success = $this->setProductPrice($data[0], $data[2])) {
-                    ++$result['pass'];
+                    ++$log['pass'];
                 }
                 else {
-                    ++$result['fail'];
-                    $result['sku'][] = 'Line: ' . $i . ' | SKU^' . $data[0];
+                    ++$log['fail'];
+                    $log['sku'][] = 'Line: ' . $i . ' | SKU^' . $data[0];
                 }
                 $this->writeLog($path, $data, $success);
             }
 
             ++$i;
-            usleep(100000);
+            usleep($this->timeout);
         }
 
-        $result['total'] = $i - $start;
+        $log['total'] = $i - $start;
 
-        return $result;
+        return $log;
     }
 
     private function setProductPrice($sku, $price)
     {
-        if($data = $this->findProductAttributeBySku($sku)) {
-            $product_price = Product::getPriceStatic($data['id_product'], false, false);
+        if($id = $this->utility->findProductAttributeIdBySku($sku)) {
+            $combination = new Combination($id);
+            $product_price = Product::getPriceStatic($combination->id_product, false, false);
 
             if($product_price !== 0) {
                 if($price < $product_price) {
@@ -248,15 +238,14 @@ class AdminTvMatrasIndexController extends ModuleAdminController
                 }
             }
 
-            $combination = new Combination($data['id_product_attribute']);
             $combination->price = (float) $price;
 
             if(!$combination->save()) {
                 return false;
             }
         }
-        else if($data = $this->findProductBySku($sku)) {
-            if(!Db::getInstance()->update('product_shop', array('price' => (float) $price), 'id_product='.$data['id_product'])) {
+        else if($id = $this->utility->findProductIdBySku($sku)) {
+            if(!Db::getInstance()->update('product_shop', array('price' => (float) $price), 'id_product=' . $id)) {
                 return false;
             }
         }
@@ -267,69 +256,20 @@ class AdminTvMatrasIndexController extends ModuleAdminController
         return $price;
     }
 
-    private function findProductBySku($sku)
-    {
-        $sql = 'SELECT `id_product` FROM `ps_product` WHERE `reference`="' . $sku .'"';
 
-        if (!$row = Db::getInstance()->getRow($sql)) {
-            return false;
-        }
-
-        return $row;
-    }
-    private function findProductAttributeBySku($sku)
-    {
-        $sql = 'SELECT `id_product`, `id_product_attribute` FROM `ps_product_attribute` WHERE `reference`="' . $sku .'"';
-
-        if (!$row = Db::getInstance()->getRow($sql)) {
-            return false;
-        }
-
-        return $row;
-    }
-    
     private function writeLog($path, $data, $success)
     {
         $status = ($success) ? 'ОК' : 'Ошибка';
-        $string = iconv('UTF-8', 'WINDOWS-1251', $data[0] . ';' . $status . ';' . $success . "\r\n");
+        $string = $data[0] . ';' . $status . ';' . $success . "\r\n";
+        $string = $this->utility->convertToWin($string);
 
-        $file = fopen($this->basePath . 'log/' . basename($path), 'a+');
-        fwrite($file, $string);
-        fclose($file);
+        $this->utility->writeToFile($this->logPath . basename($path), $string);
     }
 
-    private function getRecordsCount($file)
-    {
-        $counter = 0;
-        if (($handle = fopen($file, "r")) !== false) {
-            while (($data = fgetcsv($handle, null, ';')) !== false) {
-                $counter++;
-            }
-            fclose($handle);
-        }
-
-        --$counter; // remove first (title) row
-        return $counter;
-    }
-
-    private function sendResponse($response) {
-        echo json_encode($response);
+    private function sendResponse() {
+        $this->response->render();
+        echo $this->response->output();
         exit();
     }
 
-    private function clearDir($dir) {
-        $di = new RecursiveDirectoryIterator($dir, FilesystemIterator::SKIP_DOTS);
-        $ri = new RecursiveIteratorIterator($di, RecursiveIteratorIterator::CHILD_FIRST);
-        foreach ( $ri as $file ) {
-            $file->isDir() ?  rmdir($file) : unlink($file);
-        }
-    }
-
-    private function makeDownloadFileUrl($path)
-    {
-        $url = $this->context->link->getAdminLink('AdminTvMatrasIndex', true);
-        $url.= '&download='.base64_encode($path);
-
-        return $url;
-    }
 }

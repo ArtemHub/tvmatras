@@ -18,8 +18,8 @@ class TvMatras extends Module
 
         parent::__construct();
 
-        $this->displayName = $this->l('Tviy Matras');
-        $this->description = $this->l('Tviy Matras Descriptions');
+        $this->displayName = $this->l('Прайс: Импорт/Экспорт');
+        $this->description = $this->l('Импорт и экспорт прайса для магазина TviyMatras');
 
         $this->confirmUnonstall = $this->l('Are you sure you want to uninstall this module?');
         $this->ps_version_compliancy = array('min' => '1.6', 'max' => _PS_VERSION_);
@@ -27,7 +27,13 @@ class TvMatras extends Module
 
     public function install()
     {
-        return parent::install() && $this->installModuleTab();
+        if(!parent::install() || !$this->installModuleTab()) {
+            return false;
+        }
+
+        $this->registerHook('displayBackOfficeHeader');
+
+        return true;
     }
 
     public function uninstall()
@@ -61,5 +67,9 @@ class TvMatras extends Module
         }
 
         return true;
+    }
+
+    public function hookDisplayBackOfficeHeader() {
+        $this->context->controller->addCss($this->_path.'css/tab.css');
     }
 }

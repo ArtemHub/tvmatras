@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <module>
 	<name>tvmatras</name>
-	<displayName><![CDATA[Tviy Matras]]></displayName>
+	<displayName><![CDATA[Прайс: Импорт/Экспорт]]></displayName>
 	<version><![CDATA[1.0.0]]></version>
-	<description><![CDATA[Tviy Matras Descriptions]]></description>
+	<description><![CDATA[Импорт и экспорт прайса для магазина TviyMatras]]></description>
 	<author><![CDATA[Artem Hubenko]]></author>
 	<tab><![CDATA[administration]]></tab>
 	<is_configurable>0</is_configurable>
